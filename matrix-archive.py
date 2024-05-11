@@ -47,7 +47,7 @@ def parse_args():
 
 
 class MatrixBackup(object):
-    async def __init__(self, config: dict) -> None:
+    def __init__(self, config: dict) -> None:
         self._client = AsyncClient(
             homeserver=config["server"]["host"],
             user=config["server"]["user"],
@@ -77,9 +77,8 @@ class MatrixBackup(object):
         return filename
 
     async def save_avatars(self, room: MatrixRoom) -> None:
-        avatar_dir = os.makedirs(
-            f"{self.output}/{room.display_name}_{room.room_id}_avatars", exist_ok=True
-        )
+        avatar_dir = f"{self.output}/{room.display_name}_{room.room_id}_avatars"
+        os.makedirs(avatar_dir, exist_ok=True)
         for user in room.users.values():
             if user.avatar_url:
                 async with aiofiles.open(f"{avatar_dir}/{user.user_id}", "wb") as f:
@@ -105,7 +104,7 @@ class MatrixBackup(object):
         room: MatrixRoom,
         direction: MessageDirection,
     ) -> list:
-        events = []
+        events: list = []
         while True:
             response = await self._client.room_messages(
                 room.room_id, start_token, limit=1000, direction=direction
@@ -139,10 +138,8 @@ class MatrixBackup(object):
                 for event in events:
                     try:
                         if not self.no_media:
-                            media_dir = os.makedirs(
-                                f"{self.output}/{room.display_name}_{room.room_id}_media",
-                                exist_ok=True,
-                            )
+                            media_dir = f"{self.output}/{room.display_name}_{room.room_id}_media"
+                            os.makedirs(media_dir, exist_ok=True)
 
                         # add additional information to the message source
                         sender_name = f"<{event.sender}>"
@@ -185,12 +182,11 @@ class MatrixBackup(object):
                     except exceptions.EncryptionError as e:
                         logger.error(e)
                 # serialise message array
-                await json.dump(events_parsed, f_json, indent=4)
+                await f_json.write(json.dumps(events_parsed, indent=4))
         await self.save_avatars(room)
-        logger.info("Successfully wrote all room events to disk.")
+        logger.info("Successfully wrote all events for %s to disk.", room.room_id)
 
     async def backup_rooms(self) -> None:
-
         try:
             await self._client.sync(
                 full_state=True,
@@ -206,17 +202,11 @@ class MatrixBackup(object):
                     logger.info("Selected room: %s", room_id)
                     await self._client.write_room_events(room)
         except KeyboardInterrupt:
+            await self.shutdown()
             exit(1)
-        finally:
-            self._client.shutdown()
 
 
-async def main(config: dict) -> None:
-    client = await MatrixBackup(config)
-    client.backup_rooms()
-
-
-def load_config(config_file: str) -> dict:
+def _load_config(config_file: str) -> dict:
     with open(config_file, "r") as f_in:
         config = yaml.safe_load(f_in.read())
     if not config["root_folder"].startswith("/"):
@@ -229,7 +219,13 @@ def load_config(config_file: str) -> dict:
     return config
 
 
+async def main(config: dict) -> None:
+    client = MatrixBackup(config)
+    await client.backup_rooms()
+    await client.shutdown()
+
+
 if __name__ == "__main__":
     args = parse_args()
-    config = load_config(args.config)
+    config = _load_config(args.config)
     asyncio.get_event_loop().run_until_complete(main(config))
