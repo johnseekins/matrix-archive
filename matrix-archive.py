@@ -209,10 +209,10 @@ class MatrixBackup(object):
 def _load_config(config_file: str) -> dict:
     with open(config_file, "r") as f_in:
         config = yaml.safe_load(f_in.read())
-    if not config["root_folder"].startswith("/"):
+    if not os.path.isabs(config["root_folder"]):
         config["root_folder"] = os.path.join(SCRIPTDIR, config["root_folder"])
     os.makedirs(config["root_folder"], exist_ok=True)
-    if not config["server"]["keys_file"].startswith("/"):
+    if not os.path.isabs(config["server"]["keys_file"]):
         config["server"]["keys_file"] = os.path.join(
             SCRIPTDIR, config["server"]["keys_file"]
         )
